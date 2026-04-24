@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Shooter Game</title>
+
+<style>
+body {
+  margin:0;
+  overflow:hidden;
+  background:black;
+  user-select:none;
+}
+
+canvas { display:block; }
+
+.controls {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  text-align: center;
+}
+
+button {
+  font-size: 14px;
+  padding: 10px;
+  margin: 3px;
+  border-radius: 10px;
+}
+
+/* START SCREEN */
+#startScreen {
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:black;
+color:white;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+z-index:10;
+}
+</style>
+</head>
+
+<body>
+
+<div id="startScreen">
+  <h1>Shooter Game</h1>
+  <button onclick="startGame()">START</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<div class="controls">
+  <button onclick="moveLeft()">LEFT</button>
+  <button onclick="shoot()">FIRE</button>
+  <button onclick="moveRight()">RIGHT</button><br>
+
+  <button onclick="switchGun()">GUN</button>
+  <button onclick="changeMap()">MAP</button>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+
+// START CONTROL
+let gameStarted = false;
+function startGame(){
+  document.getElementById("startScreen").style.display="none";
+  gameStarted = true;
+}
+
+// MAPS
+let maps = ["city","forest","space"];
+let currentMap = 0;
+
+let stars = [];
+for(let i=0;i<80;i++){
+  stars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height});
+}
+
+// PLAYER
+let lanes = [canvas.width/4, canvas.width/2, 3*canvas.width/4];
+let lane = 1;
+
+// DATA
+let bullets = [];
+let enemies = [];
+let bossBullets = [];
+
+let score=0, health=3, level=1;
+let boss=null, canHit=true;
+
+// GUNS
+let guns=[
+  {name:"Pistol",speed:10,damage:1},
+  {name:"Rapid",speed:14,damage:1},
+  {name:"Heavy",speed:7,damage:2}
+];
+let gunIndex=0;
+
+// MAP
+function drawMap(){
+  let m=maps[currentMap];
+
+  if(m==="city"){
+    ctx.fillStyle="#111";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  if(m==="forest"){
+    ctx.fillStyle="#083";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  if(m==="space"){
+    ctx.fillStyle="black";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="white";
+    stars.forEach(s=>{
+      ctx.fillRect(s.x,s.y,2,2);
+      s.y+=1;
+      if(s.y>canvas.height) s.y=0;
+    });
+  }
+}
+
+// PLAYER
+function drawPlayer(){
+  let x=lanes[lane], y=canvas.height-100;
+
+  ctx.fillStyle=canHit?"cyan":"red";
+  ctx.fillRect(x-15,y-40,30,40);
+
+  ctx.fillStyle="yellow";
+  ctx.beginPath();
+  ctx.arc(x,y-55,15,0,6.28);
+  ctx.fill();
+}
+
+// BULLETS
+function drawBullets(){
+  bullets.forEach((b,i)=>{
+    b.y-=b.speed;
+    ctx.fillStyle="yellow";
+    ctx.fillRect(b.x-3,b.y,6,12);
+
+    if(b.y<0) bullets.splice(i,1);
+  });
+}
+
+// ENEMIES
+function drawEnemies(){
+  enemies.forEach((e,i)=>{
+    e.y+=e.speed+level*0.4;
+
+    ctx.fillStyle=e.color;
+    ctx.fillRect(e.x-e.size/2,e.y,e.size,e.size);
+
+    bullets.forEach((b,j)=>{
+      if(b.x>e.x-20 && b.x<e.x+20 && b.y<e.y+40 && b.y>e.y){
+        e.hp-=b.damage;
+        bullets.splice(j,1);
+
+        if(e.hp<=0){
+          enemies.splice(i,1);
+          score+=10;
+        }
+      }
+    });
+
+    let px=lanes[lane], py=canvas.height-100;
+
+    if(canHit && e.x>px-20 && e.x<px+20 && e.y+30>py-30){
+      enemies.splice(i,1);
+      health--;
+
+      canHit=false;
+      setTimeout(()=>canHit=true,800);
+
+      if(health<=0){
+        alert("Game Over Score: "+score);
+        location.reload();
+      }
+    }
+  });
+}
+
+// BOSS
+function drawBoss(){
+  if(!boss) return;
+
+  ctx.fillStyle="darkred";
+  ctx.fillRect(boss.x-40,boss.y,80,80);
+
+  ctx.fillStyle="red";
+  ctx.fillRect(boss.x-40,boss.y-10,boss.hp*2,5);
+
+  if(Math.random()<0.03){
+    bossBullets.push({x:boss.x,y:boss.y+80});
+  }
+
+  bullets.forEach((b,i)=>{
+    if(b.x>boss.x-40 && b.x<boss.x+40 && b.y>boss.y && b.y<boss.y+80){
+      boss.hp-=b.damage;
+      bullets.splice(i,1);
+
+      if(boss.hp<=0){
+        boss=null;
+        score+=100;
+      }
+    }
+  });
+}
+
+// BOSS BULLETS
+function drawBossBullets(){
+  bossBullets.forEach((b,i)=>{
+    b.y+=5;
+
+    ctx.fillStyle="white";
+    ctx.fillRect(b.x-4,b.y,8,12);
+
+    let px=lanes[lane], py=canvas.height-100;
+
+    if(canHit && b.x>px-20 && b.x<px+20 && b.y>py-40){
+      bossBullets.splice(i,1);
+      health--;
+
+      canHit=false;
+      setTimeout(()=>canHit=true,800);
+
+      if(health<=0){
+        alert("Game Over Score: "+score);
+        location.reload();
+      }
+    }
+  });
+}
+
+// SPAWN
+setInterval(()=>{
+  if(boss) return;
+
+  let l=Math.floor(Math.random()*3);
+  let r=Math.random();
+
+  let e;
+  if(r<0.6) e={x:lanes[l],y:-40,size:40,color:"lime",hp:1,speed:2};
+  else if(r<0.85) e={x:lanes[l],y:-40,size:30,color:"red",hp:1,speed:4};
+  else e={x:lanes[l],y:-40,size:50,color:"purple",hp:3,speed:1.5};
+
+  enemies.push(e);
+},1200);
+
+// CONTROLS
+function moveLeft(){ if(lane>0) lane--; }
+function moveRight(){ if(lane<2) lane++; }
+
+function shoot(){
+  let g=guns[gunIndex];
+
+  bullets.push({
+    x:lanes[lane],
+    y:canvas.height-100,
+    speed:g.speed,
+    damage:g.damage
+  });
+}
+
+function switchGun(){
+  gunIndex=(gunIndex+1)%guns.length;
+}
+
+function changeMap(){
+  currentMap=(currentMap+1)%maps.length;
+}
+
+// LEVEL
+function updateLevel(){
+  level=Math.floor(score/100)+1;
+
+  if(level%5===0 && !boss){
+    boss={
+      x:canvas.width/2,
+      y:50,
+      hp:20 + level*5
+    };
+  }
+}
+
+// UI
+function drawUI(){
+  ctx.fillStyle="white";
+  ctx.font="14px Arial";
+
+  ctx.fillText("Score:"+score,10,20);
+  ctx.fillText("Health:"+health,10,40);
+  ctx.fillText("Gun:"+guns[gunIndex].name,10,60);
+  ctx.fillText("Level:"+level,10,80);
+  ctx.fillText("Map:"+maps[currentMap],10,100);
+}
+
+// LOOP
+function loop(){
+  if(!gameStarted){
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  updateLevel();
+
+  drawMap();
+  drawPlayer();
+  drawBullets();
+  drawEnemies();
+  drawBoss();
+  drawBossBullets();
+  drawUI();
+
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+</html>
